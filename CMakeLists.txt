@@ -77,15 +77,6 @@ else()
     message(FATAL_ERROR "Blosc2 library not found in ${BLOSC2_LIB_DIR}. Please install the blosc2 Python package with bundled libraries.")
 endif()
 
-if(APPLE) # have to explicitly make these symbols visible to allow for tests to run
-    add_library(blosc2_imported SHARED IMPORTED)
-    set_target_properties(blosc2_imported PROPERTIES
-        IMPORTED_LOCATION "${BLOSC2_LIBRARY}"
-    )
-    set_target_properties(blosc2_imported PROPERTIES
-        LINK_FLAGS "-undefined dynamic_lookup -Wl,-exported_symbols_list,${CMAKE_CURRENT_SOURCE_DIR}/blosc2_symbols.txt"
-    )
-endif()
 # ============================================================
 # blosc2_grok plugin source files
 # ============================================================

@@ -57,7 +57,7 @@ target_include_directories(blosc2_grok PUBLIC ${BLOSC2_INCLUDE_DIR})
 # link to grok but not to blosc2 (on linux)
 target_link_libraries(blosc2_grok PRIVATE grokj2k)
 
-if(APPLE or WIN32)
+if(APPLE OR WIN32)
     target_link_libraries(blosc2_grok PRIVATE ${BLOSC2_LIBRARIES})
 endif()
 # Link to blosc2 necessary for Windows (and makes things easier for macos)

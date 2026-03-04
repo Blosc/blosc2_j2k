@@ -1,5 +1,9 @@
 # Release notes
 
+## Changes from 0.3.5 to 0.3.6
+
+#XXX version-specific blurb XXX#
+
 ## Changes from 0.3.4 to 0.3.5
 
 * Bug fix for switched row/col dimensions (PR #20, thanks to @alemirone)

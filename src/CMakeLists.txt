@@ -39,7 +39,14 @@ target_include_directories(grokj2k
 # Build libblosc2_grok as a shared library on every platform.  Replacement
 # backends link to the native Grok entry points, so the main target must be
 # linkable and not only a Python extension module.
-add_library(blosc2_grok SHARED blosc2_grok.cpp)
+set(BLOSC2_GROK_CORE_SOURCES
+    blosc2_grok.cpp
+    codec_requests.cpp
+    codestream_detector.cpp
+    jpeg2000_codec_paths.cpp
+    plugin_loader.cpp
+)
+add_library(blosc2_grok SHARED ${BLOSC2_GROK_CORE_SOURCES})
 
 if (MSVC OR MINGW)
     # Necessary for compiling blosc2_grok.lib
@@ -267,13 +274,16 @@ install(TARGETS blosc2_grok_backend
 # Test program
 if(NOT DEFINED ENV{DONT_BUILD_EXAMPLES})
     message(STATUS "DONT_BUILD_EXAMPLES not set-> Building examples")
-    add_executable(test_grok test_grok.cpp blosc2_grok.cpp utils.cpp)
+    add_executable(test_grok test_grok.cpp ${BLOSC2_GROK_CORE_SOURCES} utils.cpp)
     target_include_directories(test_grok PRIVATE ${BLOSC2_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/plugin)
-    add_executable(roundtrip roundtrip.cpp blosc2_grok.cpp utils.cpp)
+    add_executable(roundtrip roundtrip.cpp ${BLOSC2_GROK_CORE_SOURCES} utils.cpp)
     target_include_directories(roundtrip PRIVATE ${BLOSC2_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/plugin)
     if(MSVC OR MINGW)
         target_link_libraries(test_grok ${BLOSC2_LIBRARIES} grokj2k)
         target_link_libraries(roundtrip ${BLOSC2_LIBRARIES} grokj2k)
+    elseif(UNIX AND NOT APPLE)
+        target_link_libraries(test_grok ${BLOSC2_LIBRARIES} grokj2k m dl)
+        target_link_libraries(roundtrip ${BLOSC2_LIBRARIES} grokj2k m dl)
     else()
         target_link_libraries(test_grok ${BLOSC2_LIBRARIES} grokj2k m)
         target_link_libraries(roundtrip ${BLOSC2_LIBRARIES} grokj2k m)

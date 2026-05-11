@@ -275,7 +275,14 @@ def _add_windows_blosc2_dll_dirs():
 
 _add_windows_blosc2_dll_dirs()
 libpath = get_libpath()
-lib = ctypes.cdll.LoadLibrary(libpath)
+if os.name == "posix":
+    # HDF5's Blosc2 filter may discover this codec through dlopen() later in
+    # the same process.  Loading the codec globally makes `import blosc2_grok`
+    # a real preload step, so HDF5 and the backend plugins see the same codec
+    # library and C-Blosc2 dependency.
+    lib = ctypes.CDLL(libpath, mode=ctypes.RTLD_GLOBAL)
+else:
+    lib = ctypes.cdll.LoadLibrary(libpath)
 
 
 def print_libpath():

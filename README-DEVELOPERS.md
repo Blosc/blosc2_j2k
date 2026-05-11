@@ -59,6 +59,30 @@ Then compile your C application:
 gcc myapp.c -I/usr/local/include -L/usr/local/lib -lblosc2_grok -lgrokj2k -lblosc2 -o myapp
 ```
 
+## HDF5 loader order
+
+When `blosc2_grok` is used through the HDF5 Blosc2 filter, load the
+`libblosc2_grok` shared library before the first HDF5 read or write.  Python
+code can do this by importing the package before `hdf5plugin`/`h5py` access:
+
+```python
+import blosc2_grok
+import hdf5plugin
+import h5py
+```
+
+For C/C++ applications, viewers or other non-Python hosts, preload the codec
+library before process startup:
+
+```bash
+export BLOSC2_GROK_LIBRARY=/path/to/libblosc2_grok.so
+export LD_PRELOAD="${BLOSC2_GROK_LIBRARY}${LD_PRELOAD:+:$LD_PRELOAD}"
+```
+
+The replacement backend directories and their dependent libraries still need to
+be configured separately with `BLOSC2_GROK_REPLACEMENT_DIR`,
+`BLOSC2_GROK_HTJ2K_REPLACEMENT_DIR` and the platform dynamic-library path.
+
 ## Debugging
 
 If you would like to debug and run an example from C getting to track the problem through the C functions, you can use

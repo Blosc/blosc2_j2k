@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 
 // Threading support for guarding Grok's process-global initialization against
 // concurrent encoder/decoder use.
@@ -24,6 +25,10 @@
 #include "jpeg2000_codec_paths.h"
 #include "plugin_loader.h"
 
+#if defined(__linux__)
+#include <dlfcn.h>
+#endif
+
 #ifdef BLOSC2_MAX_DIM
 #define BLOSC2_GROK_MAX_DIM BLOSC2_MAX_DIM
 #else
@@ -32,6 +37,10 @@
 
 static grk_cparameters GRK_CPARAMETERS_DEFAULTS = {0};
 static bool GRK_INITIALIZED = false;
+
+#if defined(__linux__)
+static void *BLOSC2_GROK_GLOBAL_BLOSC2_HANDLE = nullptr;
+#endif
 
 using blosc2_grok_detail::CodecFamily;
 using blosc2_grok_detail::decode_htj2k_with_plugin;
@@ -65,6 +74,48 @@ using blosc2_grok_detail::unload_replacement_plugins;
 // - blosc2_grok_init(), blosc2_grok_set_default_params(): public runtime setup.
 // - beach_decoder(): shared decoder cleanup helper.
 namespace {
+
+#if defined(__linux__)
+// HDF5's Blosc2 filter can contain its own embedded C-Blosc2 symbols and then
+// dlopen this codec library as an external codec.  Preload the wheel's
+// libblosc2 with global visibility so backend libraries resolve against the
+// same Blosc2 runtime as blosc2_grok instead of the HDF5 filter's private copy.
+__attribute__((constructor))
+void preload_blosc2_dependency_global() {
+    if (BLOSC2_GROK_GLOBAL_BLOSC2_HANDLE != nullptr) {
+        return;
+    }
+
+    const int flags = RTLD_NOW | RTLD_GLOBAL
+#ifdef RTLD_NODELETE
+        | RTLD_NODELETE
+#endif
+        ;
+
+    Dl_info info;
+    if (dladdr(reinterpret_cast<void *>(&preload_blosc2_dependency_global), &info) &&
+        info.dli_fname != nullptr) {
+        std::filesystem::path self_dir =
+            std::filesystem::path(info.dli_fname).parent_path();
+        std::filesystem::path libblosc2_path =
+            (self_dir / ".." / "blosc2" / "lib" / "libblosc2.so").lexically_normal();
+        BLOSC2_GROK_GLOBAL_BLOSC2_HANDLE = dlopen(libblosc2_path.c_str(), flags);
+    }
+
+    if (BLOSC2_GROK_GLOBAL_BLOSC2_HANDLE == nullptr) {
+        BLOSC2_GROK_GLOBAL_BLOSC2_HANDLE = dlopen("libblosc2.so", flags);
+    }
+
+    if (std::getenv("BLOSC2_GROK_DEBUG") != nullptr) {
+        if (BLOSC2_GROK_GLOBAL_BLOSC2_HANDLE != nullptr) {
+            fprintf(stderr, "[blosc2_grok] Preloaded libblosc2 with global visibility\n");
+        } else {
+            fprintf(stderr, "[blosc2_grok] Could not preload libblosc2 globally: %s\n",
+                    dlerror());
+        }
+    }
+}
+#endif
 
 // Return the process-wide lock protecting Grok initialization.
 std::mutex &grok_init_mutex() {

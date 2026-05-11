@@ -197,6 +197,30 @@ discoverable:
 export HDF5_PLUGIN_PATH="$(python -c 'import hdf5plugin; print(hdf5plugin.PLUGIN_PATH)')"
 ```
 
+For Python processes, importing `blosc2_grok` before the first HDF5 read/write
+preloads the native codec library with global visibility:
+
+```python
+import blosc2_grok
+import hdf5plugin
+import h5py
+```
+
+For non-Python hosts such as viewers, C/C++ applications or command-line HDF5
+tools, preload the installed `libblosc2_grok` shared library before starting the
+process.  From an installed Python environment, the path can be discovered once
+with:
+
+```bash
+export BLOSC2_GROK_LIBRARY="$(python -c 'import blosc2_grok; print(blosc2_grok.libpath)')"
+export LD_PRELOAD="${BLOSC2_GROK_LIBRARY}${LD_PRELOAD:+:$LD_PRELOAD}"
+```
+
+In deployments without Python, set `BLOSC2_GROK_LIBRARY` directly to the
+installed `libblosc2_grok.so` path.  This preload step prevents HDF5's Blosc2
+filter from discovering the external codec too late during a filter callback,
+which can leave the process with incompatible Blosc2 runtime state.
+
 If the dynamic loader reports that a shared object or DLL cannot be opened, the
 replacement backend was found but one of its dependent libraries was not.  In
 practice, this usually means the backend library directory is missing from

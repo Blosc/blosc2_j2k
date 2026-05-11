@@ -618,9 +618,13 @@ int kakadu_encode(
                                                 precisions.data());
         } else if (typesize == 2) {
             std::vector<kdu_int16*> stripe_bufs(num_comps);
-            auto *input16 = reinterpret_cast<kdu_int16*>(const_cast<uint8_t*>(input));
+            auto *input16 = reinterpret_cast<const kdu_uint16*>(input);
             for (int c = 0; c < num_comps; ++c) {
-                stripe_bufs[c] = input16 + c;
+                // Kakadu's 16-bit push_stripe overload is typed as
+                // kdu_int16*, but with is_signed=false the buffer is
+                // explicitly interpreted as unsigned 16-bit input.
+                stripe_bufs[c] =
+                    reinterpret_cast<kdu_int16*>(const_cast<kdu_uint16*>(input16 + c));
             }
             std::unique_ptr<bool[]> is_signed(new bool[num_comps]);
             for (int c = 0; c < num_comps; ++c) {
@@ -755,7 +759,14 @@ int kakadu_decode(
             return -1;
         }
 
-        kdu_stripe_decompressor decompressor;
+        // Kakadu 8.5 can still touch decoder internals from the
+        // kdu_stripe_decompressor destructor after a successful HTJ2K raw
+        // codestream reset.  Keep one decoder object per thread and reset it
+        // after every chunk; this releases the codestream state without
+        // running the destructor on the hot HDF5 filter path.
+        static thread_local kdu_stripe_decompressor *tls_decompressor =
+            new kdu_stripe_decompressor();
+        kdu_stripe_decompressor &decompressor = *tls_decompressor;
         ThreadEnvGuard thread_env;
         thread_env.setup(tune.threads);
         if (debug) {
@@ -763,36 +774,99 @@ int kakadu_decode(
         }
         decompressor.start(codestream, tune.force_precise, tune.want_fastest, thread_env.ptr());
 
-        std::vector<int> stripe_heights(num_comps, height);
+        std::vector<int> stripe_heights(num_comps, 0);
         std::vector<int> precisions(num_comps, precision);
+        const int requested_stripe_height = env_int("BLOSC2_GROK_KAKADU_DECODE_STRIPE_HEIGHT", 128);
+        const int max_stripe_height =
+            (requested_stripe_height > 0 && requested_stripe_height < height) ?
+            requested_stripe_height : height;
 
         // Blosc2 chunks are one contiguous sample-interleaved buffer.  Kakadu
         // has a dedicated single-buffer overload for this layout; passing an
         // array of per-component pointers is more fragile for the full-image
-        // stripe used here.
+        // stripe.  Pulling moderate stripes also keeps Kakadu cleanup simple
+        // for large, real detector frames.
         if (debug) {
-            fprintf(stderr, "[blosc2_grok] Kakadu decoder: pulling full-image stripe\n");
+            fprintf(stderr, "[blosc2_grok] Kakadu decoder: pulling stripes height<=%d\n",
+                    max_stripe_height);
         }
-        if (typesize == 1) {
-            decompressor.pull_stripe(output, stripe_heights.data(),
-                                     nullptr, nullptr, nullptr,
-                                     precisions.data());
-        } else if (typesize == 2) {
-            auto *output16 = reinterpret_cast<kdu_int16*>(output);
-            std::unique_ptr<bool[]> is_signed(new bool[num_comps]);
+        std::unique_ptr<bool[]> is_signed;
+        if (typesize == 2) {
+            is_signed.reset(new bool[num_comps]);
             for (int c = 0; c < num_comps; ++c) {
                 is_signed[c] = false;
             }
-            decompressor.pull_stripe(output16, stripe_heights.data(),
-                                     nullptr, nullptr, nullptr,
-                                     precisions.data(), (const bool*)is_signed.get());
+        }
+        std::vector<uint8_t> decoded8;
+        std::vector<kdu_uint16> decoded16;
+        if (typesize == 1) {
+            decoded8.resize(static_cast<size_t>(expected));
+        } else if (typesize == 2) {
+            decoded16.resize(static_cast<size_t>(expected / typesize));
         }
 
-        if (debug) {
-            fprintf(stderr, "[blosc2_grok] Kakadu decoder: finishing stripe decompressor\n");
+        int rows_done = 0;
+        bool needs_more = true;
+        while (rows_done < height) {
+            int rows = height - rows_done;
+            if (rows > max_stripe_height) {
+                rows = max_stripe_height;
+            }
+            for (int c = 0; c < num_comps; ++c) {
+                stripe_heights[c] = rows;
+            }
+            if (typesize == 1) {
+                uint8_t *stripe_output = decoded8.data() +
+                    static_cast<int64_t>(rows_done) * width * num_comps;
+                needs_more = decompressor.pull_stripe(stripe_output, stripe_heights.data(),
+                                                       nullptr, nullptr, nullptr,
+                                                       precisions.data());
+            } else if (typesize == 2) {
+                // Kakadu's 16-bit pull_stripe overload is typed as
+                // kdu_int16*, but with is_signed=false the buffer is
+                // explicitly used as unsigned 16-bit storage.
+                kdu_int16 *stripe_output = reinterpret_cast<kdu_int16*>(decoded16.data()) +
+                    static_cast<int64_t>(rows_done) * width * num_comps;
+                needs_more = decompressor.pull_stripe(stripe_output, stripe_heights.data(),
+                                                       nullptr, nullptr, nullptr,
+                                                       precisions.data(),
+                                                       (const bool*)is_signed.get());
+            }
+            rows_done += rows;
+            if (debug) {
+                fprintf(stderr, "[blosc2_grok] Kakadu decoder: pulled rows=%d/%d needs_more=%d\n",
+                        rows_done, height, needs_more ? 1 : 0);
+            }
+            if (!needs_more) {
+                break;
+            }
         }
-        decompressor.finish();
+
+        if (rows_done != height) {
+            if (debug) {
+                fprintf(stderr, "[blosc2_grok] Kakadu decoder error: incomplete stripe decode rows=%d/%d\n",
+                        rows_done, height);
+            }
+            decompressor.reset();
+            codestream.destroy();
+            return -1;
+        }
+        if (debug) {
+            fprintf(stderr, "[blosc2_grok] Kakadu decoder: resetting stripe decompressor\n");
+        }
+        decompressor.reset();
+        if (debug) {
+            fprintf(stderr, "[blosc2_grok] Kakadu decoder: stripe decompressor reset done\n");
+        }
+        if (typesize == 1) {
+            std::memcpy(output, decoded8.data(), static_cast<size_t>(expected));
+        } else if (typesize == 2) {
+            std::memcpy(output, decoded16.data(), static_cast<size_t>(expected));
+        }
         codestream.destroy();
+        if (debug) {
+            fprintf(stderr, "[blosc2_grok] Kakadu decoder: codestream destroyed\n");
+        }
         if (is_jp2) {
             jp2.close();
             family.close();
@@ -801,6 +875,9 @@ int kakadu_decode(
         return -1;
     }
 
+    if (debug) {
+        fprintf(stderr, "[blosc2_grok] Kakadu decoder: complete\n");
+    }
     return output_len;
 }
 

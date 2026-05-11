@@ -68,6 +68,12 @@ if(UNIX AND NOT APPLE)
     set_target_properties(blosc2_grok PROPERTIES
         INSTALL_RPATH "$ORIGIN/../blosc2/lib"
     )
+    # C-Blosc2's HDF5 filter can load external codecs with dlopen()/dlclose()
+    # without the Python module keeping a reference to this shared library.  The
+    # codec owns process-global state and lazily loaded backend handles, so it
+    # must remain resident for the lifetime of the process when used through
+    # HDF5's dynamic plugin path.
+    target_link_options(blosc2_grok PRIVATE "-Wl,-z,nodelete")
 elseif(APPLE)
     set_target_properties(blosc2_grok PROPERTIES
         INSTALL_RPATH "@loader_path/../blosc2/lib"

@@ -277,8 +277,14 @@ void apply_kakadu_rate_defaults(siz_params &siz, int32_t precision, bool rate_co
         }
         return;
     }
-    // Kakadu needs an irreversible transform and a quantization step to make
-    // low target ratios behave like Grok's lossy path unless callers override them.
+    // Kakadu needs an irreversible transform and a quantization seed to make
+    // low target ratios behave like Grok's lossy path unless callers override
+    // them.  The final byte budget is still driven by layer_size below.
+    //
+    // Do not scale the seed all the way down to the nominal 16-bit value.  Very
+    // small steps such as 2^-21 produce valid Kakadu streams, but the bundled
+    // Grok decoder rejects those 9/7 codestreams.  A 2^-18 floor preserves most
+    // of the 16-bit precision while staying on the Grok-readable side.
     if (!kakadu_extra_has_param("creversible")) {
         bool ok = siz.parse_string("Creversible=no");
         if (debug) {
@@ -287,7 +293,9 @@ void apply_kakadu_rate_defaults(siz_params &siz, int32_t precision, bool rate_co
         }
     }
     if (!kakadu_extra_has_param("qstep") && !kakadu_extra_has_param("qfactor")) {
-        const double qstep = std::ldexp(1.0, -(precision + 5));
+        const double nominal_qstep = std::ldexp(1.0, -(precision + 5));
+        const double grok_readable_floor = std::ldexp(1.0, -18);
+        const double qstep = std::max(nominal_qstep, grok_readable_floor);
         char cmd[64];
         std::snprintf(cmd, sizeof(cmd), "Qstep=%.17g", qstep);
         bool ok = siz.parse_string(cmd);

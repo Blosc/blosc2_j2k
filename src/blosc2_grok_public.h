@@ -35,6 +35,10 @@ extern "C" {
 
 typedef struct blosc2_grok_runtime_config {
     uint32_t struct_size;
+    /*
+     * Optional plugin search path.  NULL or "" uses the default plugin root
+     * installed next to libblosc2_grok: <libdir>/plugins.
+     */
     const char *plugin_path;
     const char *j2k_backend;
     const char *htj2k_backend;

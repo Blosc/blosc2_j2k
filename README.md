@@ -135,11 +135,18 @@ Named backend discovery resolves plugins as:
 ${plugin_root}/${family}/${backend}
 ```
 
-For example, `plugin_root=/opt/blosc2_grok/plugins`,
-`family=htj2k`, and `backend=openhtj2k` selects:
+`plugin_root` is optional.  If it is not configured, the runtime automatically
+uses the default plugin root installed next to the shared library:
 
 ```text
-/opt/blosc2_grok/plugins/htj2k/openhtj2k
+<libblosc2_grok directory>/plugins
+```
+
+For example, with the default plugin root, `family=htj2k` and
+`backend=openhtj2k` selects:
+
+```text
+<libblosc2_grok directory>/plugins/htj2k/openhtj2k
 ```
 
 ### Python configuration
@@ -150,22 +157,19 @@ Use `configure()` before the first Blosc2 encode/decode or HDF5 read/write:
 import blosc2_grok
 
 blosc2_grok.configure(
-    plugin_path="/opt/blosc2_grok/plugins",
     j2k_backend="grok",
     htj2k_backend="openhtj2k",
 )
 ```
 
-All arguments are optional.  A typical HTJ2K-only configuration can leave J2K
-untouched:
+All arguments are optional.  `plugin_path` is only needed when plugins are not
+installed under the default root next to `libblosc2_grok`.  A typical HTJ2K-only
+configuration can leave J2K untouched:
 
 ```python
 import blosc2_grok
 
-blosc2_grok.configure(
-    plugin_path="/opt/blosc2_grok/plugins",
-    htj2k_backend="openhtj2k",
-)
+blosc2_grok.configure(htj2k_backend="openhtj2k")
 ```
 
 The runtime can be inspected from Python:
@@ -198,7 +202,6 @@ need the codec:
 
 blosc2_grok_runtime_config cfg = {0};
 cfg.struct_size = sizeof(cfg);
-cfg.plugin_path = "/opt/blosc2_grok/plugins";
 cfg.j2k_backend = "grok";
 cfg.htj2k_backend = "openhtj2k";
 
@@ -221,7 +224,9 @@ configuration API.  If no explicit API call has been made, backend selection is:
 2. Named backend variables:
    `BLOSC2_GROK_PLUGIN_PATH`, `BLOSC2_GROK_J2K_BACKEND`, and
    `BLOSC2_GROK_HTJ2K_BACKEND`.
-3. Defaults: native Grok for J2K, and no backend for HTJ2K.
+3. Default plugin root next to the shared library, when a named backend is used
+   without `BLOSC2_GROK_PLUGIN_PATH`.
+4. Defaults: native Grok for J2K, and no backend for HTJ2K.
 
 An explicit API call has priority over all backend-selection environment
 variables.  Configuration is finalized on first codec use; later calls to
@@ -230,10 +235,11 @@ variables.  Configuration is finalized on first codec use; later calls to
 Named backend example:
 
 ```bash
-export BLOSC2_GROK_PLUGIN_PATH="/opt/blosc2_grok/plugins"
 export BLOSC2_GROK_J2K_BACKEND="grok"
 export BLOSC2_GROK_HTJ2K_BACKEND="openhtj2k"
 ```
+
+Set `BLOSC2_GROK_PLUGIN_PATH` only for non-default plugin locations.
 
 Legacy direct-directory examples:
 

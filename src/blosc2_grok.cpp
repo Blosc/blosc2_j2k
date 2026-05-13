@@ -447,8 +447,8 @@ int blosc2_grok_native_encoder(
     if (is_htj2k_requested(compressParams)) {
         fprintf(stderr,
                 "[blosc2_grok] Native Grok HTJ2K is not enabled; configure "
-                "BLOSC2_GROK_HTJ2K_BACKEND with BLOSC2_GROK_PLUGIN_PATH, or set "
-                "legacy BLOSC2_GROK_HTJ2K_REPLACEMENT_DIR\n");
+                "BLOSC2_GROK_HTJ2K_BACKEND (BLOSC2_GROK_PLUGIN_PATH is optional "
+                "for default installs), or set legacy BLOSC2_GROK_HTJ2K_REPLACEMENT_DIR\n");
         if (codec_params == nullptr) {
             free(streamParams);
         }

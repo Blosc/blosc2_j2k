@@ -72,11 +72,13 @@ import hdf5plugin
 import h5py
 
 blosc2_grok.configure(
-    plugin_path="/path/to/site-packages/blosc2_grok/plugins",
     j2k_backend="grok",
     htj2k_backend="openhtj2k",
 )
 ```
+
+`plugin_path` is optional for plugins installed in the package default location
+next to `libblosc2_grok`.  Pass it only for custom plugin roots.
 
 For C/C++ applications, the preferred approach is to link or explicitly load
 `libblosc2_grok` and call `blosc2_grok_configure()` before opening HDF5 data:
@@ -86,7 +88,6 @@ For C/C++ applications, the preferred approach is to link or explicitly load
 
 blosc2_grok_runtime_config cfg = {0};
 cfg.struct_size = sizeof(cfg);
-cfg.plugin_path = "/path/to/site-packages/blosc2_grok/plugins";
 cfg.j2k_backend = "grok";
 cfg.htj2k_backend = "openhtj2k";
 
@@ -115,10 +116,13 @@ export BLOSC2_GROK_HTJ2K_REPLACEMENT_DIR=/path/to/plugins/htj2k/openhtj2k
 or:
 
 ```bash
-export BLOSC2_GROK_PLUGIN_PATH=/path/to/site-packages/blosc2_grok/plugins
 export BLOSC2_GROK_J2K_BACKEND=grok
 export BLOSC2_GROK_HTJ2K_BACKEND=openhtj2k
 ```
+
+`BLOSC2_GROK_PLUGIN_PATH` is optional when the plugins are installed under the
+default package root; the runtime will also search the `plugins` directory next
+to `libblosc2_grok`.
 
 Use the diagnostic helpers to verify what the runtime sees:
 

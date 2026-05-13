@@ -326,6 +326,11 @@ def last_error():
 
 
 def configure(plugin_path=None, j2k_backend=None, htj2k_backend=None):
+    """Configure runtime plugin loading before first codec use.
+
+    If ``plugin_path`` is omitted, the runtime searches the default ``plugins``
+    directory installed next to ``libblosc2_grok``.
+    """
     cfg = _RuntimeConfig()
     cfg.struct_size = ctypes.sizeof(_RuntimeConfig)
     cfg.plugin_path = _optional_bytes(plugin_path)

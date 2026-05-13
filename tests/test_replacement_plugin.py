@@ -200,6 +200,7 @@ def test_python_plugin_listing_and_diagnostics(tmp_path):
     diag = blosc2_grok.diagnose()
     assert "plugin_roots" in diag, diag
     assert "library_path" in diag, diag
+    assert "default_plugin_root" in diag, diag
     assert "env" in diag, diag
     assert "plugins" in diag, diag
     print(json.dumps({"backends": backends}, sort_keys=True))
@@ -221,6 +222,45 @@ def test_python_selftest_for_base_backends(tmp_path):
     tested = {(item["family"], item["backend"]) for item in result["results"]}
     assert ("j2k", "native") in tested
     assert ("j2k", "grok") in tested
+    """
+
+    result = run_python(script, tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_python_configure_uses_default_plugin_root(tmp_path):
+    """Named backends installed next to the library do not require plugin_path."""
+
+    script = r"""
+    import os
+
+    import blosc2_grok
+
+    for name in (
+        "BLOSC2_GROK_REPLACEMENT_DIR",
+        "BLOSC2_GROK_HTJ2K_REPLACEMENT_DIR",
+        "BLOSC2_GROK_PLUGIN_PATH",
+        "BLOSC2_GROK_J2K_BACKEND",
+        "BLOSC2_GROK_HTJ2K_BACKEND",
+    ):
+        os.environ.pop(name, None)
+
+    blosc2_grok.configure(j2k_backend="grok")
+
+    diag = blosc2_grok.diagnose()
+    assert diag["explicit_api"], diag
+    assert diag["j2k_backend"] == "grok", diag
+    assert diag["plugin_path"] == "", diag
+    assert diag["default_plugin_root"] in diag["plugin_roots"], diag
+
+    listing = blosc2_grok.list_plugins()
+    assert any(
+        p["family"] == "j2k"
+        and p["backend"] == "grok"
+        and p["selected"]
+        for p in listing["plugins"]
+    ), listing
     """
 
     result = run_python(script, tmp_path)

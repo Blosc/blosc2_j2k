@@ -71,8 +71,8 @@ int encode_htj2k_with_plugin(const uint8_t *input,
     if (!plugin) {
         fprintf(stderr,
                 "[blosc2_grok] HTJ2K encoding requires an HTJ2K backend; configure "
-                "BLOSC2_GROK_HTJ2K_BACKEND with BLOSC2_GROK_PLUGIN_PATH, or set "
-                "legacy BLOSC2_GROK_HTJ2K_REPLACEMENT_DIR\n");
+                "BLOSC2_GROK_HTJ2K_BACKEND (BLOSC2_GROK_PLUGIN_PATH is optional "
+                "for default installs), or set legacy BLOSC2_GROK_HTJ2K_REPLACEMENT_DIR\n");
         return -1;
     }
     if (!plugin->vtable.supports(&request)) {
@@ -127,8 +127,8 @@ int decode_htj2k_with_plugin(const uint8_t *input,
     if (!plugin) {
         fprintf(stderr,
                 "[blosc2_grok] HTJ2K decoding requires an HTJ2K backend; configure "
-                "BLOSC2_GROK_HTJ2K_BACKEND with BLOSC2_GROK_PLUGIN_PATH, or set "
-                "legacy BLOSC2_GROK_HTJ2K_REPLACEMENT_DIR\n");
+                "BLOSC2_GROK_HTJ2K_BACKEND (BLOSC2_GROK_PLUGIN_PATH is optional "
+                "for default installs), or set legacy BLOSC2_GROK_HTJ2K_REPLACEMENT_DIR\n");
         return -1;
     }
     if (!plugin->vtable.supports(&request)) {

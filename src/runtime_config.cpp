@@ -138,6 +138,10 @@ fs::path self_library_dir() {
     return path.empty() ? fs::current_path() : path.parent_path();
 }
 
+fs::path default_plugin_root() {
+    return self_library_dir() / "plugins";
+}
+
 std::vector<fs::path> plugin_roots_locked(const RuntimeConfig &config) {
     std::vector<fs::path> roots;
     std::set<std::string> seen;
@@ -161,7 +165,7 @@ std::vector<fs::path> plugin_roots_locked(const RuntimeConfig &config) {
         add_root(root);
     }
 
-    add_root(self_library_dir() / "plugins");
+    add_root(default_plugin_root());
     return roots;
 }
 
@@ -417,6 +421,7 @@ std::string runtime_diagnostics_json() {
     append_json_bool_field(out, "frozen", config.frozen);
     append_json_string_field(out, "library_path", self_library_path().string());
     append_json_string_field(out, "library_dir", self_library_dir().string());
+    append_json_string_field(out, "default_plugin_root", default_plugin_root().string());
     append_json_string_field(out, "plugin_path", configured_plugin_path_locked(config));
     append_json_string_field(out, "j2k_backend", configured_backend_locked(PluginFamily::J2K, config));
     append_json_string_field(out, "htj2k_backend", configured_backend_locked(PluginFamily::HTJ2K, config));

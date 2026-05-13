@@ -214,31 +214,33 @@ class GrkMode(Enum):
 def get_libpath():
     system = platform.system()
     if system == "Linux":
-        libname = "libblosc2_grok.so"
+        candidates = ["libblosc2_grok.so"]
     elif system == "Darwin":
-        libname = "libblosc2_grok.so"
+        candidates = ["libblosc2_grok.dylib", "libblosc2_grok.so"]
     elif system == "Windows":
-        libname = "blosc2_grok.dll"
-    else:
-        raise RuntimeError("Unsupported system: ", system)
-    libpath = Path(__file__).parent / libname
-    if libpath.exists():
-        return os.path.abspath(libpath)
-    if system == "Windows":
-        # Handle alternate build names (e.g., lib prefix or .pyd)
         candidates = [
+            "blosc2_grok.dll",
             "libblosc2_grok.dll",
             "blosc2_grok.pyd",
             "libblosc2_grok.pyd",
         ]
-        pkg_dir = Path(__file__).parent
-        for alt in candidates:
-            alt_path = pkg_dir / alt
-            if alt_path.exists():
+    else:
+        raise RuntimeError("Unsupported system: ", system)
+
+    pkg_dir = Path(__file__).parent
+    for libname in candidates:
+        libpath = pkg_dir / libname
+        if libpath.exists():
+            return os.path.abspath(libpath)
+
+    if system == "Darwin":
+        for pattern in ("libblosc2_grok*.dylib", "libblosc2_grok*.so"):
+            for alt_path in pkg_dir.glob(pattern):
                 return os.path.abspath(alt_path)
+    if system == "Windows":
         for alt_path in pkg_dir.glob("blosc2_grok*.pyd"):
             return os.path.abspath(alt_path)
-    return os.path.abspath(libpath)
+    return os.path.abspath(pkg_dir / candidates[0])
 
 
 _dll_dir_handles = []

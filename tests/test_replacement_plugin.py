@@ -204,7 +204,7 @@ def test_python_plugin_listing_and_diagnostics(tmp_path):
     assert "manifest_path" in diag, diag
     assert diag["manifest_exists"], diag
     assert diag["manifest_loaded"], diag
-    assert diag["manifest_priority"]["j2k"][0] == "native", diag
+    assert diag["manifest_priority"]["j2k"][0] == "kakadu", diag
     assert "htj2k" in diag["manifest_priority"], diag
     assert "env" in diag, diag
     assert "plugins" in diag, diag
@@ -292,13 +292,20 @@ def test_manifest_priorities_are_family_specific(tmp_path):
 
     diag = blosc2_grok.diagnose()
     assert diag["manifest_loaded"], diag
-    assert diag["manifest_priority"]["j2k"] == ["native", "grok", "kakadu"], diag
+    assert diag["manifest_priority"]["j2k"] == ["kakadu", "native", "grok"], diag
     assert diag["manifest_priority"]["htj2k"] == ["kakadu", "openhtj2k"], diag
 
     listing = blosc2_grok.list_plugins()
+    expected_selected = "kakadu" if any(
+        p["family"] == "j2k"
+        and p["backend"] == "kakadu"
+        and p["loadable"]
+        and p["abi_valid"]
+        for p in listing["plugins"]
+    ) else "native"
     assert any(
         p["family"] == "j2k"
-        and p["backend"] == "native"
+        and p["backend"] == expected_selected
         and p["selected"]
         for p in listing["plugins"]
     ), listing

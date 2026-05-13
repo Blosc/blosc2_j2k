@@ -226,7 +226,11 @@ configuration API.  If no explicit API call has been made, backend selection is:
    `BLOSC2_GROK_HTJ2K_BACKEND`.
 3. Default plugin root next to the shared library, when a named backend is used
    without `BLOSC2_GROK_PLUGIN_PATH`.
-4. Defaults: native Grok for J2K, and no backend for HTJ2K.
+4. Installed manifest `blosc2_grok_plugins.json`, if present.  The packaged
+   manifest prefers Kakadu for J2K when the Kakadu plugin is installed, then
+   falls back to native Grok and finally to the Grok reference plugin:
+   `["kakadu", "native", "grok"]`.
+5. Built-in defaults: native Grok for J2K, and no backend for HTJ2K.
 
 An explicit API call has priority over all backend-selection environment
 variables.  Configuration is finalized on first codec use; later calls to

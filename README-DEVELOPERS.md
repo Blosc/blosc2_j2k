@@ -120,6 +120,20 @@ export BLOSC2_GROK_J2K_BACKEND=grok
 export BLOSC2_GROK_HTJ2K_BACKEND=openhtj2k
 ```
 
+If neither explicit API nor environment variables select a backend, the
+installed `blosc2_grok_plugins.json` manifest is used.  The packaged manifest
+prefers Kakadu for J2K when the Kakadu plugin is installed, then falls back to
+native Grok and finally to the Grok reference plugin:
+
+```json
+{
+  "priority": {
+    "j2k": ["kakadu", "native", "grok"],
+    "htj2k": ["kakadu", "openhtj2k"]
+  }
+}
+```
+
 `BLOSC2_GROK_PLUGIN_PATH` is optional when the plugins are installed under the
 default package root; the runtime will also search the `plugins` directory next
 to `libblosc2_grok`.

@@ -56,7 +56,14 @@ endif()
 # The plugin API header is private to this package but needed by the core
 # loader and by the replacement backends built below.
 target_include_directories(blosc2_grok PUBLIC ${BLOSC2_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/plugin)
-target_link_libraries(blosc2_grok PRIVATE grokj2k ${BLOSC2_LIBRARIES})
+target_link_libraries(blosc2_grok PRIVATE grokj2k)
+if(APPLE OR WIN32)
+    # Keep the original Linux wheel behavior: libblosc2 is provided by the
+    # host process/package and is not a direct dependency of this shared
+    # library.  Linking it on Linux makes auditwheel try to vendor
+    # libblosc2.so.8 from the python-blosc2 wheel and breaks wheel repair.
+    target_link_libraries(blosc2_grok PRIVATE ${BLOSC2_LIBRARIES})
+endif()
 if (UNIX AND NOT APPLE)
     target_link_libraries(blosc2_grok PRIVATE dl)
 endif()
@@ -258,8 +265,14 @@ endif()
 # Reference replacement backend.  It uses the native Grok path so the runtime
 # replacement mechanism is always testable, even when Kakadu is unavailable.
 add_library(blosc2_grok_backend SHARED plugin/j2k_grok_plugin.cpp)
-target_include_directories(blosc2_grok_backend PRIVATE ${BLOSC2_INCLUDE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/plugin ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(blosc2_grok_backend PRIVATE blosc2_grok grokj2k ${BLOSC2_LIBRARIES})
+target_include_directories(blosc2_grok_backend PRIVATE
+    ${BLOSC2_INCLUDE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/plugin
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/grok/src/lib/core
+    ${CMAKE_CURRENT_BINARY_DIR}/grok/src/lib/core
+)
+target_link_libraries(blosc2_grok_backend PRIVATE blosc2_grok)
 if (MSVC OR MINGW)
     set_property(TARGET blosc2_grok_backend PROPERTY WINDOWS_EXPORT_ALL_SYMBOLS TRUE)
 endif()

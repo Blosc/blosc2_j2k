@@ -1,5 +1,5 @@
 /*********************************************************************
- * blosc2_grok: JPEG2000 codestream-family detection helpers.
+ * blosc2_j2k: JPEG2000 codestream-family detection helpers.
  *
  * Responsibilities:
  * - expose the small CodecFamily enum used by the core dispatcher;
@@ -11,12 +11,12 @@
  * License: GNU Affero General Public License v3.0 (see LICENSE.txt)
  *********************************************************************/
 
-#ifndef BLOSC2_GROK_CODESTREAM_DETECTOR_H
-#define BLOSC2_GROK_CODESTREAM_DETECTOR_H
+#ifndef BLOSC2_J2K_CODESTREAM_DETECTOR_H
+#define BLOSC2_J2K_CODESTREAM_DETECTOR_H
 
 #include <cstdint>
 
-namespace blosc2_grok_detail {
+namespace blosc2_j2k_detail {
 
 enum class CodecFamily {
     UNKNOWN,
@@ -28,6 +28,6 @@ enum class CodecFamily {
 // unrelated plugin families in sequence.
 CodecFamily detect_codestream_family(const uint8_t *data, int32_t data_len);
 
-}  // namespace blosc2_grok_detail
+}  // namespace blosc2_j2k_detail
 
-#endif  // BLOSC2_GROK_CODESTREAM_DETECTOR_H
+#endif  // BLOSC2_J2K_CODESTREAM_DETECTOR_H

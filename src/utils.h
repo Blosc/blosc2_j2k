@@ -1,5 +1,5 @@
-#ifndef BLOSC2_GROK_UTILS_H
-#define BLOSC2_GROK_UTILS_H
+#ifndef BLOSC2_J2K_UTILS_H
+#define BLOSC2_J2K_UTILS_H
 
 #include <stdio.h>
 #include <cmath>

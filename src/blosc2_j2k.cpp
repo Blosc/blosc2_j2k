@@ -15,9 +15,12 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cstddef>
 #include <algorithm>
 #include <filesystem>
+#include <limits>
 #include <string>
+#include <vector>
 
 // Threading support for guarding Grok's process-global initialization against
 // concurrent encoder/decoder use.
@@ -31,6 +34,7 @@
 #include "blosc2_j2k_public.h"
 #include "codec_requests.h"
 #include "codestream_detector.h"
+#include "float_quantization.h"
 #include "jpeg2000_codec_paths.h"
 #include "plugin_loader.h"
 #include "runtime_config.h"
@@ -45,7 +49,15 @@ using blosc2_j2k_detail::decode_j2k_with_plugin_or_native;
 using blosc2_j2k_detail::detect_codestream_family;
 using blosc2_j2k_detail::encode_htj2k_with_plugin;
 using blosc2_j2k_detail::encode_j2k_with_plugin_or_native;
+using blosc2_j2k_detail::dequantize_float32_chunk;
+using blosc2_j2k_detail::FloatFrame;
+using blosc2_j2k_detail::FLOAT_FRAME_FLAG_CONSTANT;
+using blosc2_j2k_detail::FloatRuntimeConfig;
+using blosc2_j2k_detail::float_frame_header_size;
+using blosc2_j2k_detail::has_float_frame;
 using blosc2_j2k_detail::image_layout_from_b2nd;
+using blosc2_j2k_detail::is_float32_dtype;
+using blosc2_j2k_detail::is_float_dtype;
 using blosc2_j2k_detail::is_htj2k_requested;
 using blosc2_j2k_detail::load_htj2k_replacement_plugin;
 using blosc2_j2k_detail::load_j2k_replacement_plugin;
@@ -53,7 +65,11 @@ using blosc2_j2k_detail::make_htj2k_decode_request;
 using blosc2_j2k_detail::make_htj2k_encode_request;
 using blosc2_j2k_detail::make_j2k_decode_request;
 using blosc2_j2k_detail::make_j2k_encode_request;
+using blosc2_j2k_detail::QuantizedFloatChunk;
+using blosc2_j2k_detail::quantize_float32_chunk;
 using blosc2_j2k_detail::read_b2nd_layout;
+using blosc2_j2k_detail::read_float_frame_header;
+using blosc2_j2k_detail::resolved_float_config;
 using blosc2_j2k_detail::configure_runtime;
 using blosc2_j2k_detail::diagnose_runtime_json;
 using blosc2_j2k_detail::freeze_runtime_config;
@@ -61,6 +77,7 @@ using blosc2_j2k_detail::last_runtime_error;
 using blosc2_j2k_detail::list_plugins_json;
 using blosc2_j2k_detail::set_runtime_error;
 using blosc2_j2k_detail::unload_replacement_plugins;
+using blosc2_j2k_detail::write_float_frame_header;
 
 // Function responsibility map:
 //
@@ -271,11 +288,27 @@ int blosc2_j2k_configure(const blosc2_j2k_runtime_config *config) {
         set_runtime_error("blosc2_j2k_configure received a null config");
         return -1;
     }
-    if (config->struct_size < sizeof(blosc2_j2k_runtime_config)) {
+    const size_t minimum_size = offsetof(blosc2_j2k_runtime_config, float_flags);
+    if (config->struct_size < minimum_size) {
         set_runtime_error("blosc2_j2k_runtime_config has an unsupported struct_size");
         return -1;
     }
-    return configure_runtime(config->plugin_path, config->backend, nullptr);
+    uint32_t float_flags = 0;
+    uint32_t float_quant_bits = 0;
+    double float_clamp_min = 0.0;
+    double float_clamp_max = 0.0;
+    uint32_t float_nan_policy = BLOSC2_J2K_FLOAT_NAN_POLICY_FAIL;
+    if (config->struct_size >= sizeof(blosc2_j2k_runtime_config)) {
+        float_flags = config->float_flags;
+        float_quant_bits = config->float_quant_bits;
+        float_clamp_min = config->float_clamp_min;
+        float_clamp_max = config->float_clamp_max;
+        float_nan_policy = config->float_nan_policy;
+    }
+    return configure_runtime(config->plugin_path, config->backend, nullptr,
+                             float_flags, float_quant_bits,
+                             float_clamp_min, float_clamp_max,
+                             float_nan_policy);
 }
 
 int blosc2_j2k_register_codec(void) {
@@ -340,6 +373,56 @@ int blosc2_j2k_encoder(
         return -1;
     }
 
+    B2ndLayout layout;
+    if (read_b2nd_layout(cparams, layout) && is_float_dtype(layout)) {
+        if (!is_float32_dtype(layout)) {
+            fprintf(stderr, "[blosc2_j2k] float mode v1 only supports little-endian/native float32 chunks\n");
+            return -1;
+        }
+        FloatRuntimeConfig float_config = resolved_float_config();
+        QuantizedFloatChunk quantized;
+        std::string error;
+        const bool inner_lossy = meta != 0 || (compress_params && compress_params->irreversible);
+        if (!quantize_float32_chunk(input, input_len, layout, float_config, inner_lossy, quantized, error)) {
+            fprintf(stderr, "[blosc2_j2k] %s\n", error.c_str());
+            return -1;
+        }
+        if ((quantized.frame.flags & FLOAT_FRAME_FLAG_CONSTANT) != 0) {
+            quantized.frame.payload_nbytes = 0;
+            if (!write_float_frame_header(quantized.frame, output, output_len, error)) {
+                fprintf(stderr, "[blosc2_j2k] %s\n", error.c_str());
+                return -1;
+            }
+            return float_frame_header_size();
+        }
+
+        j2k_codec_plugin_t *plugin = load_j2k_replacement_plugin();
+        if (plugin == nullptr) {
+            fprintf(stderr,
+                    "[blosc2_j2k] J2K encoding requires a J2K backend plugin; "
+                    "configure BLOSC2_J2K_BACKEND or install a manifest selecting kakadu/grok\n");
+            return -1;
+        }
+        if (output_len <= float_frame_header_size()) {
+            return 0;
+        }
+        j2k_codec_request_t request = make_j2k_encode_request(meta, cparams, chunk, compress_params);
+        request.precision_bits = quantized.frame.quant_bits;
+        int inner_size = encode_j2k_with_plugin_or_native(
+            quantized.bytes.data(), static_cast<int32_t>(quantized.bytes.size()),
+            output + float_frame_header_size(), output_len - float_frame_header_size(),
+            meta, cparams, chunk, request, plugin, debug);
+        if (inner_size <= 0) {
+            return inner_size;
+        }
+        quantized.frame.payload_nbytes = static_cast<uint64_t>(inner_size);
+        if (!write_float_frame_header(quantized.frame, output, output_len, error)) {
+            fprintf(stderr, "[blosc2_j2k] %s\n", error.c_str());
+            return -1;
+        }
+        return float_frame_header_size() + inner_size;
+    }
+
     j2k_codec_plugin_t *plugin = load_j2k_replacement_plugin();
     if (plugin == nullptr) {
         fprintf(stderr,
@@ -354,14 +437,15 @@ int blosc2_j2k_encoder(
 }
 
 // Native Grok implementation of the Blosc2 encoder entry point.
-int blosc2_j2k_native_encoder(
+static int blosc2_j2k_native_encoder_impl(
     const uint8_t *input,
     int32_t input_len,
     uint8_t *output,
     int32_t output_len,
     uint8_t meta,
     blosc2_cparams* cparams,
-    const void* chunk
+    const void* chunk,
+    uint32_t override_precision_bits
 ) {
     int size = -1;
 
@@ -380,8 +464,14 @@ int blosc2_j2k_native_encoder(
     const uint32_t dimX = static_cast<uint32_t>(dim_x);
     const uint32_t dimY = static_cast<uint32_t>(dim_y);
     const uint32_t numComps = static_cast<uint32_t>(num_comps);
-    const uint32_t typesize = static_cast<uint32_t>(layout.typesize);
-    const uint32_t precision = 8 * typesize;
+    const uint32_t precision = override_precision_bits != 0
+                                   ? override_precision_bits
+                                   : static_cast<uint32_t>(8 * layout.typesize);
+    if (!(precision == 8 || precision == 16)) {
+        fprintf(stderr, "[blosc2_j2k] native Grok J2K supports only 8/16-bit input\n");
+        return -1;
+    }
+    const uint32_t typesize = precision / 8;
 
     // initialize compress parameters
     grk_codec* codec = nullptr;
@@ -508,6 +598,33 @@ beach:
     return size;
 }
 
+int blosc2_j2k_native_encoder(
+    const uint8_t *input,
+    int32_t input_len,
+    uint8_t *output,
+    int32_t output_len,
+    uint8_t meta,
+    blosc2_cparams* cparams,
+    const void* chunk
+) {
+    return blosc2_j2k_native_encoder_impl(input, input_len, output, output_len,
+                                          meta, cparams, chunk, 0);
+}
+
+int blosc2_j2k_native_encoder_with_precision(
+    const uint8_t *input,
+    int32_t input_len,
+    uint8_t *output,
+    int32_t output_len,
+    uint8_t meta,
+    blosc2_cparams* cparams,
+    const void* chunk,
+    uint32_t precision_bits
+) {
+    return blosc2_j2k_native_encoder_impl(input, input_len, output, output_len,
+                                          meta, cparams, chunk, precision_bits);
+}
+
 // Release a partially initialized decoder and return the requested status code.
 int beach_decoder(grk_codec * codec, int rc) {
     // cleanup
@@ -520,6 +637,56 @@ int blosc2_j2k_decoder(const uint8_t *input, int32_t input_len, uint8_t *output,
                         uint8_t meta, blosc2_dparams *dparams, const void *chunk) {
     freeze_runtime_config();
     const bool debug = std::getenv("BLOSC2_J2K_DEBUG") != nullptr;
+
+    if (has_float_frame(input, input_len)) {
+        FloatFrame frame;
+        const uint8_t *payload = nullptr;
+        int32_t payload_len = 0;
+        std::string error;
+        if (!read_float_frame_header(input, input_len, frame, payload, payload_len, error)) {
+            fprintf(stderr, "[blosc2_j2k] %s\n", error.c_str());
+            return -1;
+        }
+        if ((frame.flags & FLOAT_FRAME_FLAG_CONSTANT) != 0) {
+            if (!dequantize_float32_chunk(frame, nullptr, 0, output, output_len, error)) {
+                fprintf(stderr, "[blosc2_j2k] %s\n", error.c_str());
+                return -1;
+            }
+            return output_len;
+        }
+
+        j2k_codec_plugin_t *plugin = load_j2k_replacement_plugin();
+        if (plugin == nullptr) {
+            fprintf(stderr,
+                    "[blosc2_j2k] J2K decoding requires a J2K backend plugin; "
+                    "configure BLOSC2_J2K_BACKEND or install a manifest selecting kakadu/grok\n");
+            return -1;
+        }
+        if (output_len < 0 || (output_len % 4) != 0) {
+            fprintf(stderr, "[blosc2_j2k] invalid float32 output buffer length\n");
+            return -1;
+        }
+        const int64_t element_count = output_len / 4;
+        const int64_t quantized_len64 = element_count * static_cast<int64_t>(frame.quant_bits / 8);
+        if (quantized_len64 > std::numeric_limits<int32_t>::max()) {
+            fprintf(stderr, "[blosc2_j2k] decoded float quantized buffer is too large\n");
+            return -1;
+        }
+        std::vector<uint8_t> quantized(static_cast<size_t>(quantized_len64));
+        j2k_codec_request_t request = make_j2k_decode_request(meta, dparams, chunk);
+        request.precision_bits = frame.quant_bits;
+        int decoded_size = decode_j2k_with_plugin_or_native(
+            payload, payload_len, quantized.data(), static_cast<int32_t>(quantized.size()),
+            meta, dparams, chunk, request, plugin, debug);
+        if (decoded_size <= 0) {
+            return decoded_size;
+        }
+        if (!dequantize_float32_chunk(frame, quantized.data(), decoded_size, output, output_len, error)) {
+            fprintf(stderr, "[blosc2_j2k] %s\n", error.c_str());
+            return -1;
+        }
+        return output_len;
+    }
 
     CodecFamily family = detect_codestream_family(input, input_len);
     if (family == CodecFamily::UNKNOWN) {

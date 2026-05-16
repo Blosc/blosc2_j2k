@@ -40,9 +40,11 @@ static int grok_plugin_encode(
     uint8_t meta,
     blosc2_cparams* cparams,
     const void* chunk,
-    const j2k_codec_request_t* /*request*/
+    const j2k_codec_request_t* request
 ) {
-    return blosc2_j2k_native_encoder(input, input_len, output, output_len, meta, cparams, chunk);
+    uint32_t precision_bits = request ? request->precision_bits : 0;
+    return blosc2_j2k_native_encoder_with_precision(input, input_len, output, output_len,
+                                                    meta, cparams, chunk, precision_bits);
 }
 
 // Reference backend decoder: keep the replacement path testable without any

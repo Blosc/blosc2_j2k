@@ -65,10 +65,10 @@ blosc2_j2k/
 
 Backend capabilities:
 
-| Backend | Built when | J2K | `uint8` | `uint16` | Redistributable |
-| --- | --- | --- | --- | --- | --- |
-| `plugins/j2k/grok` | always | yes | yes | J2K only | yes |
-| `plugins/j2k/kakadu` | Kakadu found | yes | yes | yes | no |
+| Backend | Built when | J2K | `uint8` | `uint16` | `uint32` | Redistributable |
+| --- | --- | --- | --- | --- | --- | --- |
+| `plugins/j2k/grok` | always | yes | yes | J2K only | no | yes |
+| `plugins/j2k/kakadu` | Kakadu found | yes | yes | yes | yes | no |
 
 Kakadu is optional and is not redistributed by this project.
 
@@ -343,6 +343,7 @@ The current tests cover:
 - codec registration with temporary id `160`;
 - lossless J2K roundtrip;
 - lossy J2K roundtrip through the Grok backend;
+- optional Kakadu `uint32` lossless roundtrip when Kakadu is installed;
 - command-line plugin listing.
 
 ## Limitations
@@ -351,7 +352,11 @@ The current tests cover:
 - Files written with id `160` require the same temporary registration mechanism
   until an official c-blosc2 id exists.
 - Kakadu is optional and not redistributable.
-- The maximum datatype precision is 16 bits.
+- The Grok backend handles the normal J2K path up to `uint16`; the optional
+  Kakadu backend also supports `uint32`.
+- For Kakadu `uint32`, the default wavelet decomposition is capped at
+  `Clevels=3` for robust small-chunk operation. Advanced users can override it
+  with `BLOSC2_J2K_CLEVELS` or `BLOSC2_J2K_KAKADU_PARAMS`.
 - The minimum practical image payload is around 256 bytes.
 
 ## Next Steps Toward An Official Plugin

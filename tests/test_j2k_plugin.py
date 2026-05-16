@@ -5,6 +5,7 @@ import sys
 import blosc2
 import blosc2_j2k
 import numpy as np
+import pytest
 
 
 def test_j2k_manifest_and_listing():
@@ -77,6 +78,57 @@ print(json.dumps(payload))
     assert proc.returncode == 0, proc.stdout + proc.stderr
     payload = json.loads(proc.stdout.strip().splitlines()[-1])
     assert payload["max_abs"] <= 256
+
+
+def test_j2k_uint32_lossless_roundtrip_with_kakadu_if_available():
+    code = r"""
+import json
+
+import blosc2_j2k
+
+if "kakadu" not in blosc2_j2k.available_backends()["j2k"]:
+    print(json.dumps({"skipped": True}))
+    raise SystemExit(0)
+
+import blosc2
+import numpy as np
+
+blosc2_j2k.register_codec()
+blosc2_j2k.configure(backend="kakadu")
+
+base = np.arange(48 * 64, dtype=np.uint32).reshape(48, 64)
+data = ((base * np.uint32(104729)) ^ (base << np.uint32(16)) ^ np.uint32(0x80000000)).astype(np.uint32)
+data[0, 0] = np.uint32(0)
+data[0, 1] = np.iinfo(np.uint32).max
+data[0, 2] = np.uint32(2**31)
+data[0, 3] = np.uint32(2**31 - 1)
+
+cparams = {
+    "codec": blosc2_j2k.CODEC_ID,
+    "filters": [],
+    "splitmode": blosc2.SplitMode.NEVER_SPLIT,
+}
+compressed = blosc2.asarray(data, chunks=data.shape, blocks=data.shape, cparams=cparams)
+decoded = compressed[...]
+np.testing.assert_array_equal(decoded, data)
+print(json.dumps({
+    "skipped": False,
+    "dtype": str(decoded.dtype),
+    "min": int(decoded.min()),
+    "max": int(decoded.max()),
+}))
+"""
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        text=True,
+        capture_output=True,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    payload = json.loads(proc.stdout.strip().splitlines()[-1])
+    if payload["skipped"]:
+        pytest.skip("Kakadu J2K backend is not installed")
+    assert payload["dtype"] == "uint32"
+    assert payload["max"] == 2**32 - 1
 
 
 def test_j2k_cli_list_plugins():

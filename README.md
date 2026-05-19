@@ -83,13 +83,17 @@ Once these branches are merged and released upstream, the first two clone/build
 steps collapse back to a normal released `blosc2` dependency.
 
 ```bash
+set -x
+set -euo pipefail
+
 mkdir blosc2_j2k_quickstart
 cd blosc2_j2k_quickstart
 
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip setuptools wheel
 python -m pip install scikit-build-core cython numpy
+export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-20}"
 
 git clone https://github.com/alemirone/c-blosc2.git
 git -C c-blosc2 checkout add_j2k_htj2k_codec_ids
@@ -101,7 +105,7 @@ cmake -S c-blosc2 -B c-blosc2-build \
   -DBUILD_EXAMPLES=OFF \
   -DBUILD_BENCHMARKS=OFF \
   -DBUILD_FUZZERS=OFF
-cmake --build c-blosc2-build --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-8}"
+cmake --build c-blosc2-build --parallel "$CMAKE_BUILD_PARALLEL_LEVEL"
 cmake --install c-blosc2-build
 
 export PKG_CONFIG_PATH="$PWD/prefix/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
@@ -266,6 +270,7 @@ pip install blosc2-j2k -U
 For local development:
 
 ```bash
+export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-20}"
 python -m pip install -v --no-build-isolation --force-reinstall --no-deps .
 ```
 
@@ -276,6 +281,7 @@ export KAKADU_ROOT=/path/to/kakadu
 export KAKADU_INCLUDE_DIR="$KAKADU_ROOT/managed/all_includes"
 export KAKADU_LIB_PATH="$KAKADU_ROOT/lib"
 export LD_LIBRARY_PATH="$KAKADU_LIB_PATH:${LD_LIBRARY_PATH:-}"
+export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-20}"
 
 CMAKE_ARGS="-DKAKADU_ROOT=$KAKADU_ROOT -DKAKADU_INCLUDE_DIR=$KAKADU_INCLUDE_DIR -DKAKADU_LIBRARY_DIR=$KAKADU_LIB_PATH" \
   python -m pip install -v --no-build-isolation --force-reinstall .

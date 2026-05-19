@@ -84,7 +84,34 @@ know codec id `39`.  The commands below rebuild only the HDF5 Blosc2 filter
 from `hdf5plugin` with `HDF5PLUGIN_SYSTEM_LIBRARIES=blosc2`, which makes that
 filter use the experimental `libblosc2` installed by `python-blosc2`.
 
-This block is meant to be copy-pasted in a fresh terminal:
+After the stack is installed, runtime setup is intentionally small.  For Python
+programs, `import hdf5plugin` loads and registers the HDF5 Blosc2 filter, and
+`LD_LIBRARY_PATH` only needs to expose the updated `libblosc2` runtime and the
+`blosc2_j2k` codec library:
+
+```bash
+export LD_LIBRARY_PATH=/path/to/blosc2/lib:/path/to/blosc2_j2k:${LD_LIBRARY_PATH:-}
+```
+
+For non-Python HDF5 programs, command-line tools, services, or web servers, add
+the HDF5 filter directory:
+
+```bash
+export HDF5_PLUGIN_PATH=/path/to/hdf5/plugins
+export LD_LIBRARY_PATH=/path/to/blosc2/lib:/path/to/blosc2_j2k:${LD_LIBRARY_PATH:-}
+```
+
+Keeping those library directories in `LD_LIBRARY_PATH` lets c-blosc2 load
+`libblosc2_j2k.so` directly.  It does not need to launch a Python interpreter to
+ask where the codec library is.  No `BLOSC2_J2K_BACKEND` variable is required
+for the default installation because `blosc2_j2k_plugins.json` defines the
+backend priority.
+
+The long block below bootstraps the current experimental stack from source.  It
+is meant to be copy-pasted in a fresh terminal.
+
+<details>
+<summary>Copy-paste full source quickstart</summary>
 
 ```bash
 mkdir -p /tmp/blosc2_j2k_quickstart
@@ -170,6 +197,8 @@ with h5py.File("quickstart_output/j2k_stack_blosc2_j2k.h5", "r") as h5f:
 print("read with hdf5plugin only:", data.shape, data.dtype, int(data.sum()))
 PY
 ```
+
+</details>
 
 After this, the same environment can be reused:
 

@@ -37,9 +37,9 @@ CMAKE_BUILD_PARALLEL_LEVEL=10 CMAKE_OSX_ARCHITECTURES=arm64 python -m cibuildwhe
 pip install wheelhouse/blosc2_j2k-*.whl --force-reinstall
 ```
 
-## Compiling C-Blosc2 apps with the grok plugin
+## Compiling C-Blosc2 apps with the J2K plugin
 
-The blosc2_j2k wheel includes static libraries and headers for reference, but for compiling C applications with the grok plugin, you should build and install blosc2_j2k from source rather than using the Python wheel.
+The blosc2_j2k wheel includes static libraries and headers for reference, but for compiling C applications with the J2K plugin, you should build and install blosc2_j2k from source rather than using the Python wheel.
 
 ### Building from source for C development
 
@@ -72,8 +72,7 @@ import hdf5plugin
 import h5py
 
 blosc2_j2k.configure(
-    j2k_backend="grok",
-    htj2k_backend="openhtj2k",
+    backend="grok",
 )
 ```
 
@@ -88,8 +87,7 @@ For C/C++ applications, the preferred approach is to link or explicitly load
 
 blosc2_j2k_runtime_config cfg = {0};
 cfg.struct_size = sizeof(cfg);
-cfg.j2k_backend = "grok";
-cfg.htj2k_backend = "openhtj2k";
+cfg.backend = "grok";
 
 if (blosc2_j2k_configure(&cfg) != 0) {
     fprintf(stderr, "%s\n", blosc2_j2k_last_error());
@@ -110,26 +108,23 @@ variables have priority over named backend variables:
 
 ```bash
 export BLOSC2_J2K_REPLACEMENT_DIR=/path/to/plugins/j2k/grok
-export BLOSC2_J2K_HTJ2K_REPLACEMENT_DIR=/path/to/plugins/htj2k/openhtj2k
 ```
 
 or:
 
 ```bash
-export BLOSC2_J2K_J2K_BACKEND=grok
-export BLOSC2_J2K_HTJ2K_BACKEND=openhtj2k
+export BLOSC2_J2K_BACKEND=grok
 ```
 
 If neither explicit API nor environment variables select a backend, the
 installed `blosc2_j2k_plugins.json` manifest is used.  The packaged manifest
 prefers Kakadu for J2K when the Kakadu plugin is installed, then falls back to
-native Grok and finally to the Grok reference plugin:
+the Grok reference plugin:
 
 ```json
 {
   "priority": {
-    "j2k": ["kakadu", "native", "grok"],
-    "htj2k": ["kakadu", "openhtj2k"]
+    "j2k": ["kakadu", "grok"]
   }
 }
 ```
@@ -148,29 +143,25 @@ python -m blosc2_j2k --selftest
 
 ## Debugging
 
-If you would like to debug and run an example from C getting to track the problem through the C functions, you can use
-the codec as a local registered codec. For that you will have to do the following:
+If you would like to debug and run an example from C, first make sure the active
+c-blosc2 build knows the official J2K id:
 
 ```
-// In blosc2_j2k_public.h
-// Comment out the info
-//BLOSC2_J2K_EXPORT codec_info info = {
-//    .encoder=(char *)"blosc2_j2k_encoder",
-//    .decoder=(char *)"blosc2_j2k_decoder"
-//};
-
-// In your example, include the blosc2_j2k_public.h header and add the function pointers
-// to the codec struct before registering it.
 #include "blosc2_j2k_public.h"
-// Some code in between
-blosc2_codec grok_codec = {0};
-grok_codec.compname = (char *)"grok";
-grok_codec.compcode = 160;
-grok_codec.complib = 1;
-grok_codec.version = 0;
-grok_codec.encoder = &blosc2_j2k_encoder;
-grok_codec.decoder = &blosc2_j2k_decoder;
-int rc = blosc2_register_codec(&grok_codec);
+
+blosc2_init();
+if (blosc2_compname_to_compcode("j2k") != BLOSC2_J2K_CODEC_ID) {
+    /* Use a c-blosc2 build that contains BLOSC_CODEC_J2K = 39. */
+    return 1;
+}
+if (blosc2_j2k_register_codec() != 0) {
+    fprintf(stderr, "%s\n", blosc2_j2k_last_error());
+    return 1;
+}
 ```
+
+The public `blosc2_register_codec()` API is only for user codecs in the dynamic
+range starting at 160.  It cannot add official global ids such as 39 to an older
+c-blosc2 runtime.
 
 That's all folks!

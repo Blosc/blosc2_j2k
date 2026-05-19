@@ -33,7 +33,7 @@ extern "C" {
 #include "blosc2/codecs-registry.h"
 #include "grok.h"
 
-#define BLOSC2_J2K_TEMP_CODEC_ID 160
+#define BLOSC2_J2K_CODEC_ID BLOSC_CODEC_J2K
 #define BLOSC2_J2K_FLOAT_CONFIG_SET     0x01u
 #define BLOSC2_J2K_FLOAT_CLAMP_MIN_SET  0x02u
 #define BLOSC2_J2K_FLOAT_CLAMP_MAX_SET  0x04u

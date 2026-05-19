@@ -9,19 +9,18 @@ small and backend-agnostic: the Blosc2 codec is called `j2k`, and the actual
 JPEG2000 implementation is selected through backend plugins installed inside
 the package.
 
-During the transition before official c-blosc2 codec ids are assigned, this
-package registers a temporary dynamic codec:
+The package uses the J2K codec id prepared for the c-blosc2 registry:
 
 ```text
 codec name:     j2k
-temporary id:   160
+codec id:       39
 library:        libblosc2_j2k.so
 Python package: blosc2_j2k
 ```
 
-The codec is plugin-only.  There is no hidden native fallback in this temporary
-package.  Backend selection comes from explicit configuration, environment
-variables, or the installed manifest.
+The codec is plugin-only.  There is no hidden native fallback in this package.
+Backend selection comes from explicit configuration, environment variables, or
+the installed manifest.
 
 The default manifest is:
 
@@ -105,7 +104,7 @@ python examples/quickstart.py --backend grok --lossy --codec-meta 80
 ```
 
 The script creates a deterministic `uint16` image, compresses it with codec id
-`160`, decodes it, and prints compression and error metrics.  In lossless mode
+`39`, decodes it, and prints compression and error metrics.  In lossless mode
 it checks exact equality.  In lossy mode it checks that the decoded image is not
 bit-identical but remains within bounded error.
 
@@ -367,8 +366,8 @@ export HDF5_PLUGIN_PATH="$(python -c 'import hdf5plugin; print(hdf5plugin.PLUGIN
 ```
 
 For Python processes that use the Python API directly, importing `blosc2_j2k`
-can register the temporary codec id and load the codec library with global
-visibility:
+loads the codec library with global visibility and checks that the active
+c-blosc2 build knows the J2K codec id:
 
 ```python
 import hdf5plugin
@@ -378,16 +377,19 @@ import h5py
 blosc2_j2k.configure(backend="grok")
 ```
 
-This is enough for Python code that calls the `blosc2_j2k` registration path
+This is enough for Python code that calls the `blosc2_j2k` registry check
 before compression/decompression.  It is not always enough for a fully
 transparent HDF5-only path, because the HDF5 Blosc2 filter may use a separate
 Blosc2 library instance.  In that case the filter can find Blosc2 and the HDF5
-plugin, but codec id `160` is still absent from the Blosc2 codec registry.
+plugin, but the process may still need the codec library to be loaded before
+the first HDF5 callback.
 
 `LD_LIBRARY_PATH` only makes shared libraries discoverable.  `HDF5_PLUGIN_PATH`
-only makes the HDF5 Blosc2 filter discoverable.  Neither one registers the
-temporary codec id in Blosc2.  During the temporary-id phase, `LD_PRELOAD` is
-the robust way to register codec id `160` before HDF5 starts using Blosc2.
+only makes the HDF5 Blosc2 filter discoverable.  With the official codec id,
+c-blosc2 must already contain the J2K registry entry.  `LD_PRELOAD` does not
+replace that registry support; it is a loader-order helper for applications
+that cannot import `blosc2_j2k` or call `blosc2_j2k_register_codec()` before
+HDF5 starts using Blosc2.
 
 Transparent HDF5 example with `h5py` and `hdf5plugin`:
 
@@ -437,26 +439,26 @@ export LD_LIBRARY_PATH=/path/to/blosc2/lib:/path/to/blosc2_j2k:${LD_LIBRARY_PATH
 export LD_PRELOAD=/path/to/blosc2_j2k/libblosc2_jpeg2000_bootstrap.so${LD_PRELOAD:+:${LD_PRELOAD}}
 ```
 
-The bootstrap calls `blosc2_init()` and registers both temporary JPEG2000 ids
-used during this prototype:
+The bootstrap calls `blosc2_init()` early so the c-blosc2 registry is populated
+before the first HDF5 callback.  The expected registry entries are:
 
 ```text
-j2k   -> 160
-htj2k -> 161
+j2k   -> 39
+htj2k -> 40
 ```
 
-This is only a deployment bridge for the temporary-id phase.  With official
-c-blosc2 codec ids, this should become simpler.  Until then, files written with
-codec id `160` need either explicit registration in the application or this
-bootstrap preload mechanism before they can be read through a transparent HDF5
-path.
+This is a deployment bridge for loader-order issues in HDF5-only or service
+runtimes.  It assumes a c-blosc2 build that includes the JPEG2000 ids in the
+built-in registry.  Older temporary-id files need the previous temporary-id
+branch, and older c-blosc2 builds that do not know id `39` must be updated; the
+public Blosc2 user-codec API cannot add global ids below the user range.
 
 ## Current Tests
 
 The current tests cover:
 
 - manifest and plugin listing;
-- codec registration with temporary id `160`;
+- codec registry check with id `39`;
 - lossless J2K roundtrip;
 - lossy J2K roundtrip through the Grok backend;
 - optional Kakadu `uint32` lossless roundtrip when Kakadu is installed;
@@ -464,9 +466,9 @@ The current tests cover:
 
 ## Limitations
 
-- Codec id `160` is temporary.
-- Files written with id `160` require the same temporary registration mechanism
-  until an official c-blosc2 id exists.
+- Codec id `39` requires a c-blosc2 build that knows the J2K registry entry.
+  The bootstrap helps with loader order, but it cannot add a new global id to an
+  older c-blosc2 build through the public user-codec API.
 - Kakadu is optional and not redistributable.
 - The Grok backend handles the normal J2K path up to `uint16`; the optional
   Kakadu backend also supports `uint32`.
@@ -479,8 +481,8 @@ The current tests cover:
 
 1. Publish this standalone repository as the candidate `blosc2_j2k` plugin.
 2. Validate Python, C/C++, HDF5, and service-runtime usage.
-3. Ask the c-blosc2 maintainers for an official codec id for `j2k`.
-4. Replace temporary id `160` with the official id.
+3. Merge the c-blosc2 registry PR that adds `BLOSC_CODEC_J2K = 39`.
+4. Keep the bootstrap only as a loader-order helper for HDF5-only deployments.
 5. Keep the backend ABI independent from the Blosc2-facing codec.
 6. Keep Grok as the open-source backend and Kakadu as an optional external
    backend.

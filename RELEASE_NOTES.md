@@ -16,7 +16,7 @@
   the corresponding `python -m blosc2_j2k` commands.
 * Preserve legacy environment variables for backend selection while adding
   named backend variables through `BLOSC2_J2K_PLUGIN_PATH`,
-  `BLOSC2_J2K_J2K_BACKEND` and `BLOSC2_J2K_HTJ2K_BACKEND`.
+  `BLOSC2_J2K_BACKEND`.
 * Improve HDF5 deployment guidance for explicit loading and `LD_PRELOAD`
   fallback use cases.
 * Keep Kakadu and OpenHTJ2K out of the core codec library; optional backends

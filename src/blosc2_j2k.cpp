@@ -45,10 +45,10 @@ static bool GRK_INITIALIZED = false;
 using blosc2_j2k_detail::B2ndLayout;
 using blosc2_j2k_detail::CodecFamily;
 using blosc2_j2k_detail::decode_htj2k_with_plugin;
-using blosc2_j2k_detail::decode_j2k_with_plugin_or_native;
+using blosc2_j2k_detail::decode_j2k_with_plugin;
 using blosc2_j2k_detail::detect_codestream_family;
 using blosc2_j2k_detail::encode_htj2k_with_plugin;
-using blosc2_j2k_detail::encode_j2k_with_plugin_or_native;
+using blosc2_j2k_detail::encode_j2k_with_plugin;
 using blosc2_j2k_detail::dequantize_float32_chunk;
 using blosc2_j2k_detail::FloatFrame;
 using blosc2_j2k_detail::FLOAT_FRAME_FLAG_CONSTANT;
@@ -83,7 +83,7 @@ using blosc2_j2k_detail::write_float_frame_header;
 //
 // Strict runtime replacement mechanism:
 // - plugin_loader.*: discover/cache J2K and HTJ2K backends from their family-specific env vars.
-// - jpeg2000_codec_paths.*: call the selected J2K/HTJ2K backend or the native J2K fallback.
+// - jpeg2000_codec_paths.*: call the selected J2K/HTJ2K backend plugin.
 // - blosc2_j2k_encoder(), blosc2_j2k_decoder(): orchestrate family selection and dispatch.
 // - blosc2_j2k_destroy(): release loaded backend handles and deinitialize Grok.
 //
@@ -312,8 +312,10 @@ int blosc2_j2k_configure(const blosc2_j2k_runtime_config *config) {
 }
 
 int blosc2_j2k_register_codec(void) {
+    blosc2_init();
+
     int existing = blosc2_compname_to_compcode("j2k");
-    if (existing == BLOSC2_J2K_TEMP_CODEC_ID) {
+    if (existing == BLOSC2_J2K_CODEC_ID) {
         return 0;
     }
     if (existing >= 0) {
@@ -321,18 +323,8 @@ int blosc2_j2k_register_codec(void) {
         return -1;
     }
 
-    blosc2_codec codec = {};
-    codec.compcode = BLOSC2_J2K_TEMP_CODEC_ID;
-    codec.compname = const_cast<char *>("j2k");
-    codec.complib = BLOSC2_J2K_TEMP_CODEC_ID;
-    codec.version = 1;
-    codec.encoder = nullptr;
-    codec.decoder = nullptr;
-    int rc = blosc2_register_codec(&codec);
-    if (rc < 0) {
-        set_runtime_error("failed to register temporary Blosc2 codec 'j2k' with id 160");
-    }
-    return rc;
+    set_runtime_error("active c-blosc2 registry does not contain the official 'j2k' codec id");
+    return -1;
 }
 
 int blosc2_j2k_list_plugins(char *buffer, size_t buffer_len) {
@@ -348,7 +340,7 @@ const char *blosc2_j2k_last_error(void) {
 }
 
 
-// Blosc2 encoder entry point for the temporary J2K codec.
+// Blosc2 encoder entry point for the J2K codec.
 int blosc2_j2k_encoder(
     const uint8_t *input,
     int32_t input_len,
@@ -413,7 +405,7 @@ int blosc2_j2k_encoder(
         }
         j2k_codec_request_t request = make_j2k_encode_request(meta, cparams, chunk, compress_params);
         request.precision_bits = quantized.frame.quant_bits;
-        int inner_size = encode_j2k_with_plugin_or_native(
+        int inner_size = encode_j2k_with_plugin(
             quantized.bytes.data(), static_cast<int32_t>(quantized.bytes.size()),
             output + float_frame_header_size(), output_len - float_frame_header_size(),
             meta, cparams, chunk, request, plugin, debug);
@@ -437,8 +429,8 @@ int blosc2_j2k_encoder(
     }
 
     j2k_codec_request_t request = make_j2k_encode_request(meta, cparams, chunk, compress_params);
-    return encode_j2k_with_plugin_or_native(input, input_len, output, output_len, meta, cparams, chunk,
-                                            request, plugin, debug);
+    return encode_j2k_with_plugin(input, input_len, output, output_len, meta, cparams, chunk,
+                                  request, plugin, debug);
 }
 
 // Native Grok implementation of the Blosc2 encoder entry point.
@@ -637,7 +629,7 @@ int beach_decoder(grk_codec * codec, int rc) {
     return rc;
 }
 
-// Blosc2 decoder entry point for the temporary J2K codec.
+// Blosc2 decoder entry point for the J2K codec.
 int blosc2_j2k_decoder(const uint8_t *input, int32_t input_len, uint8_t *output, int32_t output_len,
                         uint8_t meta, blosc2_dparams *dparams, const void *chunk) {
     freeze_runtime_config();
@@ -680,7 +672,7 @@ int blosc2_j2k_decoder(const uint8_t *input, int32_t input_len, uint8_t *output,
         std::vector<uint8_t> quantized(static_cast<size_t>(quantized_len64));
         j2k_codec_request_t request = make_j2k_decode_request(meta, dparams, chunk);
         request.precision_bits = frame.quant_bits;
-        int decoded_size = decode_j2k_with_plugin_or_native(
+        int decoded_size = decode_j2k_with_plugin(
             payload, payload_len, quantized.data(), static_cast<int32_t>(quantized.size()),
             meta, dparams, chunk, request, plugin, debug);
         if (decoded_size <= 0) {
@@ -716,8 +708,8 @@ int blosc2_j2k_decoder(const uint8_t *input, int32_t input_len, uint8_t *output,
     }
 
     j2k_codec_request_t request = make_j2k_decode_request(meta, dparams, chunk);
-    return decode_j2k_with_plugin_or_native(input, input_len, output, output_len, meta, dparams, chunk,
-                                            request, plugin, debug);
+    return decode_j2k_with_plugin(input, input_len, output, output_len, meta, dparams, chunk,
+                                  request, plugin, debug);
 }
 
 // Native Grok implementation of the Blosc2 decoder entry point.

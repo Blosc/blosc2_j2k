@@ -15,7 +15,7 @@ def test_j2k_manifest_and_listing():
     assert diag["manifest_priority"]["j2k"] == ["kakadu", "grok"]
 
 
-def test_j2k_roundtrip_with_temporary_codec():
+def test_j2k_roundtrip_with_registered_codec():
     blosc2_j2k.register_codec()
     blosc2_j2k.configure(backend="grok")
     data = (np.arange(64 * 64, dtype=np.uint16).reshape(64, 64) % 4096)

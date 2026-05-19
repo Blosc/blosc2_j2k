@@ -186,14 +186,20 @@ export LD_LIBRARY_PATH="${BLOSC2_PACKAGE}/lib:${J2K_PACKAGE}:${LD_LIBRARY_PATH:-
 # file, then check the decoded values.
 python ./blosc2_j2k/examples/quickstart.py
 
-# Build and run the C++ B2ND quickstart.  It links only to libblosc2; the J2K
-# codec library is discovered through LD_LIBRARY_PATH.
-g++ -std=c++17 ./blosc2_j2k/examples/cpp_quickstart.cpp \
+# Build and run the C++ HDF5 quickstart.  It writes a raw HDF5 stack and a
+# J2K-compressed HDF5 stack using the HDF5 Blosc2 filter.
+h5c++ -std=c++17 ./blosc2_j2k/examples/cpp_quickstart.cpp \
   -o ./cpp_j2k_quickstart \
   -I"${BLOSC2_PACKAGE}/include" \
   -L"${BLOSC2_PACKAGE}/lib" \
   -Wl,-rpath,"${BLOSC2_PACKAGE}/lib" \
   -lblosc2
+
+export HDF5_PLUGIN_PATH="$(python - <<'PY'
+import hdf5plugin
+print(hdf5plugin.PLUGINS_PATH)
+PY
+)"
 ./cpp_j2k_quickstart
 
 # Read the compressed HDF5 file in the simple Python deployment mode:
@@ -289,22 +295,31 @@ Build and run the C++ quickstart:
 export PKG_CONFIG_PATH="${BLOSC2_PACKAGE}/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 export LD_LIBRARY_PATH="${BLOSC2_PACKAGE}/lib:${J2K_PACKAGE}:${LD_LIBRARY_PATH:-}"
 
-g++ -std=c++17 ./blosc2_j2k/examples/cpp_quickstart.cpp \
+h5c++ -std=c++17 ./blosc2_j2k/examples/cpp_quickstart.cpp \
   -o ./cpp_j2k_quickstart \
   -I"${BLOSC2_PACKAGE}/include" \
   -L"${BLOSC2_PACKAGE}/lib" \
   -Wl,-rpath,"${BLOSC2_PACKAGE}/lib" \
   -lblosc2
 
+export HDF5_PLUGIN_PATH="$(python - <<'PY'
+import hdf5plugin
+print(hdf5plugin.PLUGINS_PATH)
+PY
+)"
 ./cpp_j2k_quickstart
-./cpp_j2k_quickstart --codec-meta 20
 ```
 
-This program links only to `libblosc2`.  It does not import Python and does not
-link to `libblosc2_j2k` explicitly.  The updated c-blosc2 registry knows codec
-id `39`, and `LD_LIBRARY_PATH` lets c-blosc2 discover `libblosc2_j2k.so` at
-runtime.  The sample uses B2ND because JPEG2000 needs the chunk shape and item
-size metadata.
+This program links to HDF5 and `libblosc2`.  It does not import Python and does
+not link to `libblosc2_j2k` explicitly.  The updated c-blosc2 registry knows
+codec id `39`, `HDF5_PLUGIN_PATH` lets HDF5 discover `libh5blosc2`, and
+`LD_LIBRARY_PATH` lets c-blosc2 discover `libblosc2_j2k.so` at runtime.  The
+program writes `quickstart_output/j2k_stack_raw_cpp.h5` and
+`quickstart_output/j2k_stack_blosc2_j2k_cpp.h5`.  The compressed file is written
+with direct compressed chunks so the example is independent of HDF5 filter ABI
+details at write time, but the readback is the normal transparent path:
+`H5Dread` asks HDF5 to load the Blosc2 filter, which then asks c-blosc2 to load
+the J2K codec from `LD_LIBRARY_PATH`.
 
 Open the generated HDF5 files from a Python prompt.  In Python, importing
 `hdf5plugin` is enough; do not pre-load the same plugin through

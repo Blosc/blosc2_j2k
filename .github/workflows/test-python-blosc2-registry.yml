@@ -44,5 +44,5 @@ jobs:
         env:
           BLOSC2_EXPECT_GLOBAL_CODEC_IDS: "1"
           BLOSC_TRACE: "1"
-        run: python -m pytest -q tests -k 'global_registry or manifest or roundtrip or cli'
+        run: python -m pytest -q "${{ github.workspace }}/tests" -k 'global_registry or manifest or roundtrip or cli'
         working-directory: /tmp

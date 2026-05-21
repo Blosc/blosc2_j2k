@@ -7,9 +7,15 @@ import subprocess
 import sys
 
 import blosc2
-import blosc2_j2k
 import numpy as np
 import pytest
+
+try:
+    import blosc2_j2k
+except RuntimeError as exc:
+    if "official 'j2k' codec id" in str(exc):
+        pytest.skip("requires patched python-blosc2 registry", allow_module_level=True)
+    raise
 
 
 def _load_blosc2_shared_library():

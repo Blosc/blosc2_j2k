@@ -1,7 +1,9 @@
-Announcing blosc2-j2k 0.3.5
-============================
+Announcing blosc2-j2k
+=====================
 
-This is a patch release. The only change is a bug fix for incorrectly intepreted row/col dimensions for images.
+This package provides the Blosc2 J2K codec plugin using official codec id `39`.
+The codec is backend-agnostic: Grok is the open-source backend, and Kakadu can
+be used when available locally.
 
 You can have a look at the release notes in:
 
@@ -13,9 +15,8 @@ https://github.com/Blosc/blosc2_j2k#readme
 
 ## What is it?
 
-Blosc2-grok is a dynamic codec plugin for Blosc2 that allows to compress
-and decompress images using the JPEG 2000 standard.  For details, check the
-[grok wiki](https://github.com/GrokImageCompression/grok/wiki).
+`blosc2_j2k` is a dynamic codec plugin for Blosc2 that allows compression and
+decompression through regular JPEG 2000 Part 1 / J2K codestreams.
 
 ## Sources repository
 

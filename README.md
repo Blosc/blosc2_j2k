@@ -1,15 +1,15 @@
 # blosc2_j2k
 
-`blosc2_j2k` is an experimental Blosc2 codec plugin for regular JPEG2000
-Part 1 / J2K codestreams.
+`blosc2_j2k` is a Blosc2 codec plugin for regular JPEG2000 Part 1 / J2K
+codestreams using official codec id `39`.
 
-It is a standalone split-out version of the J2K part of the previous
-`blosc2_grok` runtime-backend prototype.  The goal is to keep the Blosc2 codec
+It is the J2K-specific successor of the previous `blosc2_grok`
+runtime-backend prototype.  The goal is to keep the Blosc2 codec
 small and backend-agnostic: the Blosc2 codec is called `j2k`, and the actual
 JPEG2000 implementation is selected through backend plugins installed inside
 the package.
 
-The package uses the J2K codec id prepared for the c-blosc2 registry:
+The package uses the official J2K codec id in the c-blosc2 registry:
 
 ```text
 codec name:     j2k
@@ -236,7 +236,7 @@ ask where the codec library is.  No `BLOSC2_J2K_BACKEND` variable is required
 for the default installation because `blosc2_j2k_plugins.json` defines the
 backend priority.
 
-The long block below bootstraps the current experimental stack from source.  It
+The long block below bootstraps the current development stack from source.  It
 is meant to be copy-pasted in a fresh terminal.
 
 <details>
@@ -759,8 +759,8 @@ interactive session, call `hdf5plugin.register("blosc2", force=True)`.
 For transparent HDF5-only use, the HDF5 Blosc2 filter must also use a c-blosc2
 runtime that already contains the J2K registry entry.  If `hdf5plugin` embeds an
 older c-blosc2 copy, the filter will fail before `libblosc2_j2k.so` can be used.
-No `hdf5plugin` change is required for the experimental codec name; writers can
-pass the numeric filter options returned by
+No new `hdf5plugin` codec name is required; writers can pass the numeric
+Blosc2 filter options returned by
 `blosc2_j2k.hdf5_compression_opts()`.
 
 Transparent HDF5 example with `h5py` and `hdf5plugin`:
@@ -829,9 +829,10 @@ htj2k -> 40
 
 This is a deployment bridge for loader-order issues in HDF5-only or service
 runtimes.  It assumes a c-blosc2 build that includes the JPEG2000 ids in the
-built-in registry.  Older temporary-id files need the previous temporary-id
-branch, and older c-blosc2 builds that do not know id `39` must be updated; the
-public Blosc2 user-codec API cannot add global ids below the user range.
+built-in registry.  Files written with the old pre-registry temporary ids need
+the corresponding historical branch, and older c-blosc2 builds that do not know
+id `39` must be updated; the public Blosc2 user-codec API cannot add global ids
+below the user range.
 
 ## Current Tests
 
@@ -857,14 +858,22 @@ The current tests cover:
   with `BLOSC2_J2K_CLEVELS` or `BLOSC2_J2K_KAKADU_PARAMS`.
 - The minimum practical image payload is around 256 bytes.
 
-## Next Steps Toward An Official Plugin
+## Current Integration Status
 
-1. Publish this standalone repository as the candidate `blosc2_j2k` plugin.
-2. Validate Python, C/C++, HDF5, and service-runtime usage.
-3. Merge the c-blosc2 registry PR that adds `BLOSC_CODEC_J2K = 39`.
-4. Keep the bootstrap only as a loader-order helper for HDF5-only deployments.
-5. Keep the backend ABI independent from the Blosc2-facing codec.
-6. Keep Grok as the open-source backend and Kakadu as an optional external
+1. This repository now lives under the Blosc organization as the candidate
+   `blosc2_j2k` plugin.
+2. The c-blosc2 registry entry for `BLOSC_CODEC_J2K = 39` has been merged
+   upstream.
+3. The remaining upstream consolidation is the python-blosc2 update exposing
+   `blosc2.Codec.J2K`.
+4. Once python-blosc2 and hdf5plugin wheels are rebuilt against a c-blosc2
+   release with codec id `39`, the README demo quickstart and CI workflows can
+   drop the temporary source-build workarounds.
+5. Keep validating Python, C/C++, HDF5, and service-runtime usage on Linux,
+   macOS, and Windows wheels.
+6. Keep the bootstrap only as a loader-order helper for HDF5-only deployments.
+7. Keep the backend ABI independent from the Blosc2-facing codec.
+8. Keep Grok as the open-source backend and Kakadu as an optional external
    backend.
 
 ## More Examples

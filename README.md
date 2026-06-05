@@ -312,7 +312,7 @@ PY
 
 # Install the J2K plugin.  The default manifest selects kakadu first when it is
 # usable, then grok.  No BLOSC2_J2K_BACKEND variable is needed for this test.
-git clone --recursive https://github.com/alemirone/blosc2_j2k.git
+git clone --recursive https://github.com/Blosc/blosc2_j2k.git
 python -m pip install -v --no-build-isolation --no-deps ./blosc2_j2k
 
 export J2K_PACKAGE="$(python -c 'from pathlib import Path; import blosc2_j2k; print(Path(blosc2_j2k.__file__).resolve().parent)')"

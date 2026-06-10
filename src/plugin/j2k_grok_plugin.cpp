@@ -67,7 +67,7 @@ J2K_CODEC_PLUGIN_EXPORT j2k_codec_plugin_t J2K_CODEC_PLUGIN = {
     J2K_CODEC_PLUGIN_ABI_VERSION,
     sizeof(j2k_codec_plugin_t),
     "grok",
-    "0.3.6",
+    "0.4.0",
     {
         grok_plugin_supports,
         grok_plugin_encode,
